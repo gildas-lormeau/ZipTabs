@@ -1,0 +1,134 @@
+body {
+	width: 400px;
+	margin: 5px;
+	font-family: sans-serif;
+	font-size: 10pt;
+}
+
+h4 {
+	position: relative;
+	margin-top: 2px;
+	margin-bottom: 5px;
+	padding: 5px;
+	border-bottom: solid 2px #CCC;
+	padding-bottom: 10px;
+	height: 30px;
+}
+
+h4 span {
+	font-size: 18pt;
+	padding-bottom: 10px;
+	padding-left: 10px;
+	text-shadow: 2px 1px 1px #aaa;
+	position: relative;
+	bottom: 4px;
+	display: inline-block;
+}
+
+h4 img {
+	width: 32px;
+	height: 32px;
+}
+
+ul {
+	-webkit-box-flex: 1;
+	padding-left: 10px;
+	overflow-y: auto;
+	padding-left: 5px;
+	padding-right: 5px;
+	padding-top: 2px;
+	padding-bottom: 5px;
+	margin-bottom: 30px;
+	max-height: 500px;
+	margin-top: 3px;
+}
+
+li {
+	list-style-type: none;
+	padding-bottom: 2px;
+	padding-top: 1px;
+	position: relative;
+}
+
+input {
+	background-color: inherit;
+}
+
+input[type=checkbox] {
+	margin-right: 0px;
+}
+
+input[type=button],button {
+	width: 120px;
+	background-color: #f3f3f3;
+	-webkit-border-radius: 3px;
+}
+
+input[type=file] {
+	position: absolute;
+	right: 0px;
+	top: 1px;
+	margin: 2px;
+	direction: rtl;
+	color: transparent;
+}
+
+ul a:visited,#pages-links a {
+	color: #00C;
+}
+
+.tabs-tab-favico {
+	height: 16px;
+	left: 3px;
+	margin-right: 8px;
+	margin-left: 5px;
+	position: relative;
+	top: 1px;
+	width: 16px;
+}
+
+#tabs-zip-action {
+	position: absolute;
+	right: 0px;
+	bottom: 0px;
+	width: 80px;
+}
+
+.tabs-tab-title {
+	display: inline-block;
+	width: 320px;
+	margin-left: 5px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	overflow: hidden;
+	position: relative;
+	top: -2px;
+}
+
+.tabs-tab-title.saving {
+	width: 220px;
+}
+
+.tabs-tab-progress {
+	position: absolute;
+	right: 5px;
+	top: 3px;
+	height: 15px;
+	width: 95px;
+	opacity: .5;
+}
+
+#error {
+	padding-left: 5px;
+	padding-right: 5px;
+	font-size: 11pt;
+}
+
+*::-webkit-file-upload-button {
+	background-color: transparent;
+	color: blue;
+	border: none;
+	text-decoration: underline;
+	cursor: pointer;
+}
