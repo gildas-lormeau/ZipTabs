@@ -33,6 +33,10 @@
 
 	var state = STATE.IDLE;
 
+	function getValidFileName(fileName) {
+		return fileName.replace(/[\\\/:\*\?\"><|]/gi, "").trim();
+	}
+
 	function WatchDog(resetFn) {
 		var timeout, that = this;
 
@@ -83,7 +87,7 @@
 			};
 		},
 		refreshPopup : EMPTY_FUNCTION,
-		exportTabs : function(tabIds) {
+		exportTabs : function(tabIds, filename) {
 			var zipWorker = new Worker("../scripts/jszip-worker.js"), index = 0, max = tabIds.length, watchdog = new WatchDog(terminate), tabs = {};
 
 			function onProgress(tabId, tab) {
@@ -125,10 +129,7 @@
 				var data = event.data;
 				if (data.message == "generate") {
 					terminate();
-					chrome.tabs.create({
-						url : webkitURL.createObjectURL(data.zip),
-						selected : false
-					});
+					ziptabs.saveZip(data.zip, filename);
 				}
 				if (data.message == "add") {
 					onProgress(data.id, {
@@ -234,7 +235,7 @@
 						}
 
 						function openFile() {
-							filesystem.root.getFile((indexFile++) + ".html", {
+							filesystem.root.getFile(getValidFileName((indexFile++) + ".html"), {
 								create : true
 							}, function(fileEntry) {
 								fileEntry.createWriter(function(fileWriter) {
@@ -267,6 +268,23 @@
 					watchdog.set();
 				};
 				fileReader.readAsBinaryString(file);
+			};
+
+			globalObject.ziptabs.saveZip = function(blob, filename) {
+				filesystem.root.getFile(getValidFileName(filename), {
+					create : true
+				}, function(fileEntry) {
+					function fileEntryCallback() {
+						chrome.tabs.create({
+							url : fileEntry.toURL(),
+							selected : false
+						});
+					}
+					fileEntry.createWriter(function(fileWriter) {
+						fileWriter.onwrite = fileEntryCallback;
+						fileWriter.write(blob);
+					});
+				});
 			};
 		}
 

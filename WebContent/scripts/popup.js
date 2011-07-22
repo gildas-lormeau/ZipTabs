@@ -93,13 +93,16 @@
 			ziptabs.importTabs(event.target.files[0]);
 	}, false);
 	document.getElementById("tabs-zip-action").addEventListener("click", function() {
-		var selectedIds = [];
+		var selectedIds = [], filename;
 		Array.prototype.forEach.call(document.querySelectorAll("input[type=checkbox]"), function(inputElement) {
 			if (inputElement.checked)
 				selectedIds.push(Number(inputElement.parentElement.id.split("tabs-tab-")[1]));
 		});
-		if (selectedIds.length && ziptabs.idle())
-			ziptabs.exportTabs(selectedIds);
+		if (selectedIds.length && ziptabs.idle()) {
+			filename = prompt("Filename:", "ZipTabs - " + (new Date()).toDateString() + ".zip");
+			if (filename)
+				ziptabs.exportTabs(selectedIds, filename);
+		}
 	}, false);
 	ziptabs.detectSingleFile(function(detected) {
 		var main = document.getElementById("main");
