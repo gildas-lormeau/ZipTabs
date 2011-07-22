@@ -4,7 +4,7 @@
 		"16": "resources/icon-16.png",
 		"48": "resources/icon-48.png",
 		"128": "resources/icon-128.png" },
-	"version": "0.1",
+	"version": "0.1.1",
 	"description": "Archive tabs in a zip file",
 	"background_page" : "pages/background.html",
 	"browser_action": {
