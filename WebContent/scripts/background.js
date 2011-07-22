@@ -178,7 +178,7 @@
 		}
 	};
 
-	webkitRequestFileSystem(TEMPORARY, 100 * 1024 * 1024, function(filesystem) {
+	webkitRequestFileSystem(TEMPORARY, 1024 * 1024 * 1024, function(filesystem) {
 		var indexFile = 0;
 
 		function cleanFilesystem(callback) {
