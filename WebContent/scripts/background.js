@@ -182,7 +182,7 @@
 		var indexFile = 0;
 
 		function cleanFilesystem(callback) {
-			rootReader = filesystem.root.createReader("/");
+			var rootReader = filesystem.root.createReader("/");
 			rootReader.readEntries(function(entries) {
 				var i = 0;
 
@@ -271,20 +271,26 @@
 			};
 
 			globalObject.ziptabs.saveZip = function(blob, filename) {
-				filesystem.root.getFile(getValidFileName(filename), {
-					create : true
-				}, function(fileEntry) {
-					function fileEntryCallback() {
-						chrome.tabs.create({
-							url : fileEntry.toURL(),
-							selected : false
+				function createFile() {
+					filesystem.root.getFile(filename, {
+						create : true
+					}, function(fileEntry) {
+						fileEntry.createWriter(function(fileWriter) {
+							fileWriter.onwrite = function() {
+								chrome.tabs.create({
+									url : fileEntry.toURL(),
+									selected : false
+								});
+							};
+							fileWriter.write(blob);
 						});
-					}
-					fileEntry.createWriter(function(fileWriter) {
-						fileWriter.onwrite = fileEntryCallback;
-						fileWriter.write(blob);
 					});
-				});
+				}
+
+				filename = getValidFileName(filename);
+				filesystem.root.getFile(filename, {}, function(fileEntry) {
+					fileEntry.remove(createFile, createFile);
+				}, createFile);
 			};
 		}
 
