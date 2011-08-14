@@ -32,6 +32,7 @@
 	};
 
 	var state = STATE.IDLE;
+	var createFile, cleanFilesystem;
 
 	function getValidFileName(fileName) {
 		return fileName.replace(/[\\\/:\*\?\"><|]/gi, "").trim();
@@ -60,15 +61,15 @@
 		};
 	}
 
-	function terminateProcess(worker, watchdog) {
+	function terminateProcess(watchdog) {
 		chrome.browserAction.setBadgeText({
 			text : ""
 		});
 		chrome.browserAction.setTitle({
 			title : ""
 		});
-		worker.terminate();
 		state = STATE.IDLE;
+		console.log("terminateProcess");
 		watchdog.reset();
 	}
 
@@ -88,7 +89,7 @@
 		},
 		refreshPopup : EMPTY_FUNCTION,
 		exportTabs : function(tabIds, filename) {
-			var zipWorker = new Worker("../scripts/jszip-worker.js"), index = 0, max = tabIds.length, watchdog = new WatchDog(terminate), tabs = {};
+			var zipper, file, index = 0, max = tabIds.length, watchdog = new WatchDog(terminate), tabs = {};
 
 			function onProgress(tabId, tab) {
 				if (tab)
@@ -102,7 +103,7 @@
 
 			function terminate() {
 				globalObject.ziptabs.refreshPopup = EMPTY_FUNCTION;
-				terminateProcess(zipWorker, watchdog);
+				terminateProcess(watchdog);
 			}
 
 			function singleFileListener(request, sender, sendResponse) {
@@ -114,41 +115,48 @@
 						state : 1
 					});
 				else if (request.processEnd) {
-					zipWorker.postMessage({
-						message : "add",
-						name : (request.title.replace(/[\\\/:\*\?\"><|]/gi, "").trim() || "Untitled") + " (" + tabId + ").html",
-						content : request.content.replace(/<meta[^>]*http-equiv\s*=\s*["']?content-type[^>]*>/gi, "").replace(/<meta[^>]*charset\s*=[^>]*>/gi,
-								""),
-						id : tabId
-					});
-					sendResponse({});
-				}
-			}
-
-			function workerOnmessage(event) {
-				var data = event.data;
-				if (data.message == "generate") {
-					terminate();
-					ziptabs.saveZip(data.zip, filename);
-				}
-				if (data.message == "add") {
-					onProgress(data.id, {
-						state : 2
-					});
-					watchdog.set();
-					index++;
-					if (index == max) {
-						chrome.extension.onRequestExternal.removeListener(singleFileListener);
-						zipWorker.postMessage({
-							message : "generate"
+					var content, filename, blobBuilder = new (WebKitBlobBuilder || BlobBuilder)(), reader = new FileReader();
+					content = request.content.replace(/<meta[^>]*http-equiv\s*=\s*["']?content-type[^>]*>/gi, "").replace(/<meta[^>]*charset\s*=[^>]*>/gi, "");
+					filename = (request.title.replace(/[\\\/:\*\?\"><|]/gi, "").trim() || "Untitled") + " (" + tabId + ").html";
+					blobBuilder.append(content);
+					reader.onload = function(e) {
+						var data = new Uint8Array(e.target.result);
+						zipper.add(filename, data, null, function() {
+							onProgress(tabId, {
+								state : 2
+							});
+							watchdog.set();
+							index++;
+							if (index == max) {
+								chrome.extension.onRequestExternal.removeListener(singleFileListener);
+								zipper.close(function() {
+									terminate();
+									chrome.tabs.create({
+										url : file.toURL(),
+										selected : false
+									});
+								});
+							} else
+								chrome.extension.sendRequest(SINGLE_FILE_ID, {
+									tabIds : [ tabIds[index] ]
+								}, function() {
+								});
+							chrome.browserAction.setBadgeText({
+								text : Math.floor((index / max) * 100) + "%"
+							});
+							chrome.browserAction.setTitle({
+								title : "Exporting tabs..."
+							});
+						}, function(current, total) {
+							onProgress(tabId, {
+								index : current,
+								max : total,
+								state : 2
+							});
 						});
-					}
-					chrome.browserAction.setBadgeText({
-						text : Math.floor((index / max) * 100) + "%"
-					});
-					chrome.browserAction.setTitle({
-						title : "Exporting tabs..."
-					});
+						sendResponse({});
+					};
+					reader.readAsArrayBuffer(blobBuilder.getBlob());
 				}
 			}
 
@@ -159,10 +167,6 @@
 			};
 			state = STATE.EXPORTING;
 			watchdog.set();
-			zipWorker.onmessage = workerOnmessage;
-			zipWorker.postMessage({
-				message : "new"
-			});
 			tabIds.forEach(function(tabId) {
 				onProgress(tabId, {
 					index : 0,
@@ -171,17 +175,82 @@
 				});
 			});
 			chrome.extension.onRequestExternal.addListener(singleFileListener);
-			chrome.extension.sendRequest(SINGLE_FILE_ID, {
-				tabIds : tabIds
-			}, function() {
+			cleanFilesystem(function() {
+				createFile(filename, function(outputFile) {
+					file = outputFile;
+					zipper = zip.createWriter(file);
+					chrome.extension.sendRequest(SINGLE_FILE_ID, {
+						tabIds : [ tabIds[index] ]
+					}, function() {
+					});
+				});
 			});
+		},
+		importTabs : function(inputFile) {
+			var watchdog = new WatchDog(terminate);
+
+			var unzipper = zip.createReader(inputFile);
+
+			function terminate() {
+				terminateProcess(watchdog);
+			}
+
+			unzipper.getEntries(function(entries) {
+				function getEntry(index) {
+					var entry = entries[index];
+
+					function nextFile() {
+						chrome.browserAction.setBadgeText({
+							text : Math.floor((index / entries.length) * 100) + "%"
+						});
+						chrome.browserAction.setTitle({
+							title : "Importing archives..."
+						});
+						if (index == entries.length - 1)
+							terminate();
+						else {
+							getEntry(index + 1);
+							watchdog.set();
+						}
+					}
+
+					if (entry && /.html$|.htm$/.test(entry.filename))
+						createFile(index + ".html", function(file) {
+							file.createWriter(function(fileWriter) {
+								fileWriter.onwrite = function(event) {
+									chrome.tabs.create({
+										url : file.toURL(),
+										selected : false
+									}, nextFile);
+								};
+								fileWriter.onerror = nextFile;
+								entry.getData(function(data) {
+									var blobBuilder = new (WebKitBlobBuilder || BlobBuilder)(), buffer = new ArrayBuffer(data.length), array = new Uint8Array(
+											buffer);
+									array.set(data, 0);
+									blobBuilder.append(buffer);
+									fileWriter.write(blobBuilder.getBlob());
+								});
+							}, nextFile);
+						}, function(current, total) {
+							// TODO
+						}, !index);
+					else
+						nextFile();
+				}
+
+				cleanFilesystem(function() {
+					getEntry(0);
+				});
+			});
+
+			state = STATE.IMPORTING;
+			watchdog.set();
 		}
 	};
 
 	webkitRequestFileSystem(TEMPORARY, 1024 * 1024 * 1024, function(filesystem) {
-		var indexFile = 0;
-
-		function cleanFilesystem(callback) {
+		cleanFilesystem = function(callback) {
 			var rootReader = filesystem.root.createReader("/");
 			rootReader.readEntries(function(entries) {
 				var i = 0;
@@ -200,101 +269,13 @@
 
 				removeNextEntry();
 			}, callback);
-		}
-
-		function setImportTabs() {
-			globalObject.ziptabs.importTabs = function(file) {
-				var index = 0, max = 0, fileReader = new FileReader(), watchdog = new WatchDog(terminate), unzipWorker = new Worker(
-						"../scripts/jsunzip-worker.js");
-
-				function terminate() {
-					terminateProcess(unzipWorker, watchdog);
-				}
-
-				state = STATE.IMPORTING;
-				fileReader.onloadend = function(event) {
-					unzipWorker.onmessage = function(event) {
-						var data = event.data;
-
-						function nextFile() {
-							chrome.browserAction.setBadgeText({
-								text : Math.floor((index / max) * 100) + "%"
-							});
-							chrome.browserAction.setTitle({
-								title : "Importing archives..."
-							});
-							if (index == max)
-								terminate();
-							else {
-								index++;
-								unzipWorker.postMessage({
-									message : "getNextEntry"
-								});
-								watchdog.set();
-							}
-						}
-
-						function openFile() {
-							filesystem.root.getFile(getValidFileName((indexFile++) + ".html"), {
-								create : true
-							}, function(fileEntry) {
-								fileEntry.createWriter(function(fileWriter) {
-									fileWriter.onwrite = function(event) {
-										chrome.tabs.create({
-											url : fileEntry.toURL(),
-											selected : false
-										}, nextFile);
-									};
-									fileWriter.onerror = nextFile;
-									fileWriter.write(data.file);
-								}, nextFile);
-							}, nextFile);
-						}
-
-						if (data.message == "parse") {
-							max = data.entriesLength;
-							nextFile();
-						}
-						if (data.message == "getNextEntry")
-							if (/.html$|.htm$/.test(data.filename.trim()))
-								openFile();
-							else
-								nextFile();
-					};
-					unzipWorker.postMessage({
-						message : "parse",
-						content : event.target.result
-					});
-					watchdog.set();
-				};
-				fileReader.readAsBinaryString(file);
-			};
-
-			globalObject.ziptabs.saveZip = function(blob, filename) {
-				function createFile() {
-					filesystem.root.getFile(filename, {
-						create : true
-					}, function(fileEntry) {
-						fileEntry.createWriter(function(fileWriter) {
-							fileWriter.onwrite = function() {
-								chrome.tabs.create({
-									url : fileEntry.toURL(),
-									selected : false
-								});
-							};
-							fileWriter.write(blob);
-						});
-					});
-				}
-
-				filename = getValidFileName(filename);
-				filesystem.root.getFile(filename, {}, function(fileEntry) {
-					fileEntry.remove(createFile, createFile);
-				}, createFile);
-			};
-		}
-
-		cleanFilesystem(setImportTabs);
+		};
+		createFile = function(filename, callback) {
+			filename = getValidFileName(filename);
+			filesystem.root.getFile(filename, {
+				create : true
+			}, callback, callback);
+		};
 	});
 
 	chrome.browserAction.setBadgeBackgroundColor({

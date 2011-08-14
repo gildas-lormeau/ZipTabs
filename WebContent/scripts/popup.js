@@ -74,12 +74,14 @@
 					progressElement.hidden = false;
 				// FIXME weird bug : hack to force progress bars to be displayed/hidden
 				document.getElementById("main").style.height = "auto";
-				if (state != 2) {
-					checkboxElement.disabled = true;
-					titleElement.className = "tabs-tab-title saving";
+				checkboxElement.disabled = true;
+				titleElement.className = "tabs-tab-title saving";
+				if (index) {
+					index = state == 1 ? index : max + index;
 					progressElement.value = index;
-					progressElement.max = max;
+					progressElement.max = max * 2;
 					progressElement.title = "progress: " + Math.floor((index * 100) / max) + "%";
+					progressElement.className = "tabs-tab-progress " + (state == 1 ? "pass-one" : "pass-two");
 				} else {
 					checkboxElement.disabled = false;
 					titleElement.className = "tabs-tab-title";
