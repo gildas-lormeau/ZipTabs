@@ -78,8 +78,9 @@
 				titleElement.className = "tabs-tab-title saving";
 				if (index) {
 					index = state == 1 ? index : max + index;
+					max = max * 2;
 					progressElement.value = index;
-					progressElement.max = max * 2;
+					progressElement.max = max;
 					progressElement.title = "progress: " + Math.floor((index * 100) / max) + "%";
 					progressElement.className = "tabs-tab-progress " + (state == 1 ? "pass-one" : "pass-two");
 				} else {
