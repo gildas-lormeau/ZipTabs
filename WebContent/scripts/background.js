@@ -187,11 +187,10 @@
 			});
 		},
 		importTabs : function(inputFile) {
-			var watchdog = new WatchDog(terminate);
-
-			var unzipper = zip.createReader(inputFile);
+			var watchdog = new WatchDog(terminate), unzipper = zip.createReader(inputFile);
 
 			function terminate() {
+				unzipper.close();
 				terminateProcess(watchdog);
 			}
 
