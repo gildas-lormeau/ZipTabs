@@ -61,16 +61,22 @@
 		};
 	}
 
-	function terminateProcess(watchdog) {
-		chrome.browserAction.setBadgeText({
-			text : ""
-		});
-		chrome.browserAction.setTitle({
-			title : ""
-		});
-		state = STATE.IDLE;
-		console.log("terminateProcess");
-		watchdog.reset();
+	function terminateProcess(process, watchdog) {
+		function end() {
+			chrome.browserAction.setBadgeText({
+				text : ""
+			});
+			chrome.browserAction.setTitle({
+				title : ""
+			});
+			state = STATE.IDLE;
+			watchdog.reset();
+		}
+		
+		if (process)
+			process.close(end);
+		else
+			end();
 	}
 
 	globalObject.ziptabs = {
@@ -103,7 +109,8 @@
 
 			function terminate() {
 				globalObject.ziptabs.refreshPopup = EMPTY_FUNCTION;
-				terminateProcess(watchdog);
+				terminateProcess(zipper, watchdog);
+				zipper = null;
 			}
 
 			function singleFileListener(request, sender, sendResponse) {
@@ -130,11 +137,12 @@
 							if (index == max) {
 								chrome.extension.onRequestExternal.removeListener(singleFileListener);
 								zipper.close(function() {
-									terminate();
 									chrome.tabs.create({
 										url : file.toURL(),
 										selected : false
 									});
+									zipper = null;
+									terminate();
 								});
 							} else
 								chrome.extension.sendRequest(SINGLE_FILE_ID, {
@@ -190,8 +198,7 @@
 			var watchdog = new WatchDog(terminate), unzipper = zip.createReader(inputFile);
 
 			function terminate() {
-				unzipper.close();
-				terminateProcess(watchdog);
+				terminateProcess(unzipper, watchdog);
 			}
 
 			unzipper.getEntries(function(entries) {
