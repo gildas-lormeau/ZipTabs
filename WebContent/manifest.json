@@ -3,8 +3,9 @@
 	"icons": {
 		"16": "resources/icon-16.png",
 		"48": "resources/icon-48.png",
-		"128": "resources/icon-128.png" },
-	"version": "0.1.5",
+		"128": "resources/icon-128.png"
+	},
+	"version": "0.1.6",
 	"description": "Archive tabs in a zip file",
 	"background_page" : "pages/background.html",
 	"browser_action": {
@@ -13,5 +14,5 @@
 	    "default_popup": "pages/popup.html"
 	},
 	"permissions" : ["tabs", "unlimitedStorage", "notifications"],
-	"minimum_chrome_version" : "12"
+	"minimum_chrome_version" : "14"
 }

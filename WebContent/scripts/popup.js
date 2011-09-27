@@ -64,6 +64,7 @@
 
 	globalObject.ziptabs = {
 		onTabProgress : function(tabId, state, index, max) {
+			console.log("onTabProgress", tabId, state, index, max);
 			var progressElement, checkboxElement, titleElement, tabElement = document.getElementById("tabs-tab-" + tabId);
 			if (tabElement) {
 				progressElement = tabElement.querySelector("progress");
@@ -76,13 +77,13 @@
 				document.getElementById("main").style.height = "auto";
 				checkboxElement.disabled = true;
 				titleElement.className = "tabs-tab-title saving";
-				if (index) {
-					index = state == 1 ? index : max + index;
+				if ((state == 1 || state == 2) && max) {
+					index = state == 1 ? index : state == 2 ? max + index : 0;
 					max = max * 2;
 					progressElement.value = index;
 					progressElement.max = max;
 					progressElement.title = "progress: " + Math.floor((index * 100) / max) + "%";
-					progressElement.className = "tabs-tab-progress " + (state == 1 ? "pass-one" : "pass-two");
+					progressElement.className = "tabs-tab-progress " + (state == 1 ? "pass-one" : state == 2 ? "pass-two" : "");
 				} else {
 					checkboxElement.disabled = false;
 					titleElement.className = "tabs-tab-title";

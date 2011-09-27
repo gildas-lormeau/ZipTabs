@@ -72,7 +72,7 @@
 			state = STATE.IDLE;
 			watchdog.reset();
 		}
-		
+
 		if (process)
 			process.close(end);
 		else
@@ -95,7 +95,7 @@
 		},
 		refreshPopup : EMPTY_FUNCTION,
 		exportTabs : function(tabIds, filename) {
-			var zipper, file, index = 0, max = tabIds.length, watchdog = new WatchDog(terminate), tabs = {};
+			var zipWriter, file, index = 0, max = tabIds.length, watchdog = new WatchDog(terminate), tabs = {};
 
 			function onProgress(tabId, tab) {
 				if (tab)
@@ -109,8 +109,8 @@
 
 			function terminate() {
 				globalObject.ziptabs.refreshPopup = EMPTY_FUNCTION;
-				terminateProcess(zipper, watchdog);
-				zipper = null;
+				terminateProcess(zipWriter, watchdog);
+				zipWriter = null;
 			}
 
 			function singleFileListener(request, sender, sendResponse) {
@@ -122,49 +122,46 @@
 						state : 1
 					});
 				else if (request.processEnd) {
-					var content, filename, blobBuilder = new (WebKitBlobBuilder || BlobBuilder)(), reader = new FileReader();
+					var content, filename, blobBuilder = new (globalObject.WebKitBlobBuilder || globalObject.BlobBuilder)();
 					content = request.content.replace(/<meta[^>]*http-equiv\s*=\s*["']?content-type[^>]*>/gi, "").replace(/<meta[^>]*charset\s*=[^>]*>/gi, "");
 					filename = (request.title.replace(/[\\\/:\*\?\"><|]/gi, "").trim() || "Untitled") + " (" + tabId + ").html";
+					blobBuilder.append((new Uint8Array([ 0xEF, 0xBB, 0xBF ])).buffer);
 					blobBuilder.append(content);
-					reader.onload = function(e) {
-						var data = new Uint8Array(e.target.result);
-						zipper.add(filename, data, null, function() {
-							onProgress(tabId, {
-								state : 2
-							});
-							watchdog.set();
-							index++;
-							if (index == max) {
-								chrome.extension.onRequestExternal.removeListener(singleFileListener);
-								zipper.close(function() {
-									chrome.tabs.create({
-										url : file.toURL(),
-										selected : false
-									});
-									zipper = null;
-									terminate();
-								});
-							} else
-								chrome.extension.sendRequest(SINGLE_FILE_ID, {
-									tabIds : [ tabIds[index] ]
-								}, function() {
-								});
-							chrome.browserAction.setBadgeText({
-								text : Math.floor((index / max) * 100) + "%"
-							});
-							chrome.browserAction.setTitle({
-								title : "Exporting tabs..."
-							});
-						}, function(current, total) {
-							onProgress(tabId, {
-								index : current,
-								max : total,
-								state : 2
-							});
+					zipWriter.add(filename, new zip.BlobReader(blobBuilder.getBlob()), null, function() {
+						onProgress(tabId, {
+							state : 2
 						});
-						sendResponse({});
-					};
-					reader.readAsArrayBuffer(blobBuilder.getBlob());
+						watchdog.set();
+						index++;
+						if (index == max) {
+							chrome.extension.onRequestExternal.removeListener(singleFileListener);
+							zipWriter.close(function() {
+								chrome.tabs.create({
+									url : file.toURL(),
+									selected : false
+								});
+								zipWriter = null;
+								terminate();
+							});
+						} else
+							chrome.extension.sendRequest(SINGLE_FILE_ID, {
+								tabIds : [ tabIds[index] ]
+							}, function() {
+							});
+						chrome.browserAction.setBadgeText({
+							text : Math.floor((index / max) * 100) + "%"
+						});
+						chrome.browserAction.setTitle({
+							title : "Exporting tabs..."
+						});
+					}, function(current, total) {
+						onProgress(tabId, {
+							index : current,
+							max : total,
+							state : 2
+						});
+					});
+					sendResponse({});
 				}
 			}
 
@@ -186,72 +183,69 @@
 			cleanFilesystem(function() {
 				createFile(filename, function(outputFile) {
 					file = outputFile;
-					zipper = zip.createWriter(file);
-					chrome.extension.sendRequest(SINGLE_FILE_ID, {
-						tabIds : [ tabIds[index] ]
-					}, function() {
-					});
+					zip.createWriter(new zip.FileWriter(outputFile), false, function(writer) {
+						zipWriter = writer;
+						chrome.extension.sendRequest(SINGLE_FILE_ID, {
+							tabIds : [ tabIds[index] ]
+						}, function() {
+						});
+					}, onerror);
 				});
 			});
 		},
 		importTabs : function(inputFile) {
-			var watchdog = new WatchDog(terminate), unzipper = zip.createReader(inputFile);
+			var watchdog = new WatchDog(terminate), zipReader;
 
 			function terminate() {
-				terminateProcess(unzipper, watchdog);
+				terminateProcess(zipReader, watchdog);
 			}
 
-			unzipper.getEntries(function(entries) {
-				function getEntry(index) {
-					var entry = entries[index];
+			zip.createReader(new zip.BlobReader(inputFile), function(reader) {
+				zipReader = reader;
+				zipReader.getEntries(function(entries) {
+					function getEntry(index) {
+						var entry = entries[index];
 
-					function nextFile() {
-						chrome.browserAction.setBadgeText({
-							text : Math.floor((index / entries.length) * 100) + "%"
-						});
-						chrome.browserAction.setTitle({
-							title : "Importing archives..."
-						});
-						if (index == entries.length - 1)
-							terminate();
-						else {
-							getEntry(index + 1);
-							watchdog.set();
+						function nextFile() {
+							chrome.browserAction.setBadgeText({
+								text : Math.floor((index / entries.length) * 100) + "%"
+							});
+							chrome.browserAction.setTitle({
+								title : "Importing archives..."
+							});
+							if (index == entries.length - 1)
+								terminate();
+							else {
+								getEntry(index + 1);
+								watchdog.set();
+							}
 						}
-					}
 
-					if (entry && /.html$|.htm$/.test(entry.filename))
-						createFile(index + ".html", function(file) {
-							file.createWriter(function(fileWriter) {
-								fileWriter.onwrite = function(event) {
+						if (entry && /.html$|.htm$/.test(entry.filename))
+							createFile(index + ".html", function(file) {
+								entry.getData(new zip.FileWriter(file), function() {
 									chrome.tabs.create({
 										url : file.toURL(),
 										selected : false
 									}, nextFile);
-								};
-								fileWriter.onerror = nextFile;
-								entry.getData(function(data) {
-									var blobBuilder = new (WebKitBlobBuilder || BlobBuilder)(), buffer = new ArrayBuffer(data.length), array = new Uint8Array(
-											buffer);
-									array.set(data, 0);
-									blobBuilder.append(buffer);
-									fileWriter.write(blobBuilder.getBlob());
+								}, function(current, total) {
+									chrome.browserAction.setBadgeText({
+										text : Math.floor((index / entries.length) * 100 + ((current / total) * (100 / entries.length))) + "%"
+									});
 								});
-							}, nextFile);
-						}, function(current, total) {
-							// TODO
-						}, !index);
-					else
-						nextFile();
-				}
+							}, !index);
+						else
+							nextFile();
+					}
 
-				cleanFilesystem(function() {
-					getEntry(0);
-				});
-			});
+					cleanFilesystem(function() {
+						getEntry(0);
+					});
+				}, onerror);
+				watchdog.set();
+			}, onerror);
 
 			state = STATE.IMPORTING;
-			watchdog.set();
 		}
 	};
 
