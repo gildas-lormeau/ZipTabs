@@ -50,7 +50,7 @@
 		that.set = function() {
 			that.reset();
 			timeout = setTimeout(function() {
-				var notificationNoResponse = webkitNotifications.createHTMLNotification('notification-abort.html');
+				var notificationNoResponse = webkitNotifications.createHTMLNotification("pages/notification-abort.html");
 				notificationNoResponse.show();
 				setTimeout(function() {
 					notificationNoResponse.cancel();
@@ -122,19 +122,20 @@
 						state : 1
 					});
 				else if (request.processEnd) {
-					var content, filename, blobBuilder = new (globalObject.WebKitBlobBuilder || globalObject.BlobBuilder)();
+					var content, filename, blob;
 					content = request.content.replace(/<meta[^>]*http-equiv\s*=\s*["']?content-type[^>]*>/gi, "").replace(/<meta[^>]*charset\s*=[^>]*>/gi, "");
 					filename = (request.title.replace(/[\\\/:\*\?\"><|]/gi, "").trim() || "Untitled") + " (" + tabId + ").html";
-					blobBuilder.append((new Uint8Array([ 0xEF, 0xBB, 0xBF ])).buffer);
-					blobBuilder.append(content);
-					zipWriter.add(filename, new zip.BlobReader(blobBuilder.getBlob()), null, function() {
+					blob = new Blob([ new Uint8Array([ 0xEF, 0xBB, 0xBF ]), content ], {
+						type : "text/html"
+					});
+					zipWriter.add(filename, new zip.BlobReader(blob), function() {
 						onProgress(tabId, {
 							state : 2
 						});
 						watchdog.set();
 						index++;
 						if (index == max) {
-							chrome.extension.onRequestExternal.removeListener(singleFileListener);
+							chrome.extension.onMessageExternal.removeListener(singleFileListener);
 							zipWriter.close(function() {
 								chrome.tabs.create({
 									url : file.toURL(),
@@ -144,7 +145,7 @@
 								terminate();
 							});
 						} else
-							chrome.extension.sendRequest(SINGLE_FILE_ID, {
+							chrome.extension.sendMessage(SINGLE_FILE_ID, {
 								tabIds : [ tabIds[index] ]
 							}, function() {
 							});
@@ -161,7 +162,6 @@
 							state : 2
 						});
 					});
-					sendResponse({});
 				}
 			}
 
@@ -179,13 +179,13 @@
 					state : 0
 				});
 			});
-			chrome.extension.onRequestExternal.addListener(singleFileListener);
+			chrome.extension.onMessageExternal.addListener(singleFileListener);
 			cleanFilesystem(function() {
 				createFile(filename, function(outputFile) {
 					file = outputFile;
-					zip.createWriter(new zip.FileWriter(outputFile), false, function(writer) {
+					zip.createWriter(new zip.FileWriter(outputFile), function(writer) {
 						zipWriter = writer;
-						chrome.extension.sendRequest(SINGLE_FILE_ID, {
+						chrome.extension.sendMessage(SINGLE_FILE_ID, {
 							tabIds : [ tabIds[index] ]
 						}, function() {
 						});
@@ -249,6 +249,7 @@
 		}
 	};
 
+	zip.workerScriptsPath = "scripts/";
 	webkitRequestFileSystem(TEMPORARY, 1024 * 1024 * 1024, function(filesystem) {
 		cleanFilesystem = function(callback) {
 			var rootReader = filesystem.root.createReader("/");
